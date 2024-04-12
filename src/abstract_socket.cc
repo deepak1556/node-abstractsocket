@@ -2,8 +2,9 @@
 # error "Only Linux is supported"
 #endif
 
-#include <nan.h>
+#include <napi.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -13,14 +14,14 @@
 
 namespace {
 
-using v8::FunctionTemplate;
-using v8::Local;
-using v8::Object;
-using v8::String;
-using v8::Value;
+using Napi::FunctionReference;
+using Napi::Object;
+using Napi::String;
+using Napi::Value;
 
 
-NAN_METHOD(Socket) {
+Napi::Value Socket(const Napi::CallbackInfo& info) {
+    Napi::Env env(info.Env());
     int fd;
     int type;
 
@@ -32,15 +33,14 @@ NAN_METHOD(Socket) {
     fd = socket(AF_UNIX, type, 0);
     if (fd == -1) {
         fd = -errno;
-        goto out;
     }
 
-out:
-    info.GetReturnValue().Set(fd);
+    return Napi::Number::New(env, fd);
 }
 
 
-NAN_METHOD(Bind) {
+Napi::Value Bind(const Napi::CallbackInfo& info) {
+    Napi::Env env(info.Env());
     sockaddr_un s;
     socklen_t namelen;
     int err;
@@ -49,10 +49,10 @@ NAN_METHOD(Bind) {
 
     assert(info.Length() == 2);
 
-    fd = info[0]->Int32Value(Nan::GetCurrentContext()).FromJust();
-    Nan::Utf8String path(info[1]);
+    fd = info[0].As<Napi::Number>().Int32Value();
+    std::string path = info[1].As<Napi::String>();
 
-    if ((*path)[0] != '\0') {
+    if ((path)[0] != '\0') {
         err = -EINVAL;
         goto out;
     }
@@ -64,7 +64,7 @@ NAN_METHOD(Bind) {
     }
 
     memset(&s, 0, sizeof s);
-    memcpy(s.sun_path, *path, len);
+    memcpy(s.sun_path, path.c_str(), len);
     s.sun_family = AF_UNIX;
     namelen = offsetof(struct sockaddr_un, sun_path) + len;
 
@@ -73,11 +73,12 @@ NAN_METHOD(Bind) {
         err = -errno;
 
 out:
-    info.GetReturnValue().Set(err);
+    return Napi::Number::New(env, err);
 }
 
 
-NAN_METHOD(Connect) {
+Napi::Value Connect(const Napi::CallbackInfo& info) {
+    Napi::Env env(info.Env());
     sockaddr_un s;
     socklen_t namelen;
     int err;
@@ -86,10 +87,10 @@ NAN_METHOD(Connect) {
 
     assert(info.Length() == 2);
 
-    fd = info[0]->Int32Value(Nan::GetCurrentContext()).FromJust();
-    Nan::Utf8String path(info[1]);
+    fd = info[0].As<Napi::Number>().Int32Value();
+    std::string path = info[1].As<Napi::String>();
 
-    if ((*path)[0] != '\0') {
+    if ((path)[0] != '\0') {
         err = -EINVAL;
         goto out;
     }
@@ -101,7 +102,7 @@ NAN_METHOD(Connect) {
     }
 
     memset(&s, 0, sizeof s);
-    memcpy(s.sun_path, *path, len);
+    memcpy(s.sun_path, path.c_str(), len);
     s.sun_family = AF_UNIX;
     namelen = offsetof(struct sockaddr_un, sun_path) + len;
 
@@ -110,16 +111,17 @@ NAN_METHOD(Connect) {
         err = -errno;
 
 out:
-    info.GetReturnValue().Set(err);
+    return Napi::Number::New(env, err);
 }
 
 
-NAN_METHOD(Close) {
+Napi::Value Close(const Napi::CallbackInfo& info) {
+    Napi::Env env(info.Env());
     int err;
     int fd;
 
     assert(info.Length() == 1);
-    fd = info[0]->Int32Value(Nan::GetCurrentContext()).FromJust();
+    fd = info[0].As<Napi::Number>().Int32Value();
 
     // POSIX 2008 states that it unspecified what the state of a file descriptor
     // is if close() is interrupted by a signal and fails with EINTR.  This is a
@@ -160,22 +162,19 @@ NAN_METHOD(Close) {
     if (close(fd))
         err = -errno;
 
-    info.GetReturnValue().Set(err);
+    return Napi::Number::New(env, err);
 }
 
 
-void Initialize(Local<Object> target) {
-    Nan::Set(target, Nan::New("socket").ToLocalChecked(),
-             Nan::GetFunction(Nan::New<FunctionTemplate>(Socket)).ToLocalChecked());
-    Nan::Set(target, Nan::New("bind").ToLocalChecked(),
-             Nan::GetFunction(Nan::New<FunctionTemplate>(Bind)).ToLocalChecked());
-    Nan::Set(target, Nan::New("connect").ToLocalChecked(),
-             Nan::GetFunction(Nan::New<FunctionTemplate>(Connect)).ToLocalChecked());
-    Nan::Set(target, Nan::New("close").ToLocalChecked(),
-             Nan::GetFunction(Nan::New<FunctionTemplate>(Close)).ToLocalChecked());
+Napi::Object Initialize(Napi::Env env, Napi::Object exports) {
+    exports.Set("socket", Napi::Function::New(env, Socket));
+    exports.Set("bind", Napi::Function::New(env, Bind));
+    exports.Set("connect", Napi::Function::New(env, Connect));
+    exports.Set("close", Napi::Function::New(env, Close));
+    return exports;
 }
 
 
 } // anonymous namespace
 
-NODE_MODULE(abstract_socket, Initialize)
+NODE_API_MODULE(abstract_socket, Initialize)

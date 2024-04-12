@@ -21,8 +21,8 @@
         "node": ">=4.0.0"
     },
     "dependencies": {
-        "bindings": "^1.2.1",
-        "nan": "^2.12.1"
+      "node-addon-api": "8.0.0",
+      "bindings": "^1.2.1"
     },
     "devDependencies": {
         "mocha": "3.x",
